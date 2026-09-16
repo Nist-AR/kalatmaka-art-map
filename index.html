@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kālātmaka | Interactive Art History Map of India</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        charcoal: '#0F1012',
+                        panelBg: '#16181C',
+                        cream: '#F5F2EB',
+                        gold: '#C8963E',
+                        goldHover: '#DFAB53',
+                        crimson: '#8B2626'
+                    },
+                    fontFamily: {
+                        serif: ['Cinzel', 'serif'],
+                        sans: ['Plus Jakarta Sans', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: #0F1012; }
+        ::-webkit-scrollbar-thumb { background: #2A2D34; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #C8963E; }
+
+        /* Custom Leaflet Dark Mode Overrides & Pin Animations */
+        .leaflet-container { background: #0F1012 !important; font-family: 'Plus Jakarta Sans', sans-serif; }
+        .leaflet-control-zoom { border: 1px solid #2A2D34 !important; }
+        .leaflet-control-zoom a { background-color: #16181C !important; color: #F5F2EB !important; border-bottom: 1px solid #2A2D34 !important; }
+        .leaflet-control-attribution { background: rgba(15, 16, 18, 0.8) !important; color: #888 !important; }
+
+        /* Custom Animated Map Marker */
+        .custom-pin-container { position: relative; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; }
+        .pin-pulse { position: absolute; width: 100%; height: 100%; border-radius: 50%; background-color: rgba(200, 150, 62, 0.4); animation: pulse 2s infinite ease-in-out; }
+        .pin-core { position: relative; width: 14px; height: 14px; border-radius: 50%; background-color: #C8963E; border: 2px solid #F5F2EB; transition: transform 0.2s ease; cursor: pointer; }
+        .custom-pin-container:hover .pin-core { transform: scale(1.4); background-color: #DFAB53; }
+        
+        @keyframes pulse {
+            0% { transform: scale(0.8); opacity: 0.8; }
+            50% { transform: scale(2.2); opacity: 0; }
+            100% { transform: scale(0.8); opacity: 0; }
+        }
+    </style>
+</head>
+<body class="bg-charcoal text-cream font-sans h-screen overflow-hidden flex flex-col">
+
+    <!-- TOP HEADER -->
+    <header class="h-16 border-b border-white/10 px-6 flex items-center justify-between bg-charcoal z-20 shrink-0">
+        <div class="flex items-center space-x-3">
+            <i data-lucide="compass" class="text-gold w-6 h-6"></i>
+            <h1 class="font-serif font-bold text-xl tracking-wider text-cream">KĀLĀTMAKA <span class="text-xs font-sans font-normal tracking-normal text-gold uppercase ml-2 border border-gold/40 px-2 py-0.5 rounded">Art History Atlas</span></h1>
+        </div>
+        <div class="flex items-center space-x-4">
+            <button onclick="toggleCompareModal()" class="flex items-center space-x-2 bg-panelBg border border-gold/30 hover:border-gold px-3 py-1.5 rounded-md text-xs font-medium text-cream transition-all">
+                <i data-lucide="columns" class="w-4 h-4 text-gold"></i>
+                <span>Compare Styles</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN INTERFACE: SPLIT SCREEN -->
+    <div class="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+
+        <!-- LEFT CONTROL & MAP PANEL -->
+        <div class="w-full md:w-3/5 lg:w-2/3 h-1/2 md:h-full relative flex flex-col">
+            
+            <!-- Floating Filter Toolbar -->
+            <div class="absolute top-4 left-4 right-4 z-[1000] flex flex-col md:flex-row gap-2 pointer-events-none">
+                <!-- Search -->
+                <div class="relative flex-1 pointer-events-auto shadow-2xl">
+                    <i data-lucide="search" class="absolute left-3 top-2.5 w-4 h-4 text-gray-400"></i>
+                    <input type="text" id="searchInput" oninput="applyFilters()" placeholder="Search art form, region, medium..." 
+                        class="w-full bg-panelBg/90 backdrop-blur-md border border-white/10 rounded-md pl-9 pr-4 py-2 text-sm text-cream focus:outline-none focus:border-gold placeholder-gray-500">
+                </div>
+                <!-- Era Filter -->
+                <select id="eraFilter" onchange="applyFilters()" class="pointer-events-auto bg-panelBg/90 backdrop-blur-md border border-white/10 rounded-md px-3 py-2 text-sm text-cream focus:outline-none focus:border-gold">
+                    <option value="ALL">All Eras</option>
+                    <option value="Prehistoric">Prehistoric</option>
+                    <option value="Ancient">Ancient</option>
+                    <option value="Medieval">Medieval</option>
+                    <option value="Modern">Modern</option>
+                </select>
+                <!-- Medium Filter -->
+                <select id="mediumFilter" onchange="applyFilters()" class="pointer-events-auto bg-panelBg/90 backdrop-blur-md border border-white/10 rounded-md px-3 py-2 text-sm text-cream focus:outline-none focus:border-gold">
+                    <option value="ALL">All Mediums</option>
+                    <option value="Murals">Murals</option>
+                    <option value="Miniatures">Miniatures</option>
+                    <option value="Folk">Folk</option>
+                    <option value="Architecture">Architecture</option>
+                </select>
+            </div>
+
+            <!-- Leaflet Canvas -->
+            <div id="map" class="w-full h-full z-10"></div>
+        </div>
+
+        <!-- RIGHT DETAIL PANEL / MOBILE DRAWER -->
+        <aside id="detailPanel" class="w-full md:w-2/5 lg:w-1/3 h-1/2 md:h-full bg-panelBg border-t md:border-t-0 md:border-l border-white/10 flex flex-col overflow-y-auto z-20 transition-all duration-300">
+            <!-- Dynamic Content Injected Here -->
+            <div id="panelPlaceholder" class="flex-1 flex flex-col items-center justify-center p-8 text-center text-gray-400">
+                <i data-lucide="map-pin-line" class="w-12 h-12 text-gold/40 mb-3 animate-bounce"></i>
+                <p class="font-serif text-lg text-cream">Select a location on the map</p>
+                <p class="text-xs text-gray-500 mt-1">Explore centuries of Indian artistic traditions, natural pigments, and regional masterworks.</p>
+            </div>
+            <div id="panelContent" class="hidden flex-1 flex flex-col p-6 space-y-6"></div>
+        </aside>
+    </div>
+
+    <!-- COMPARISON MODAL -->
+    <div id="compareModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[2000] hidden flex items-center justify-center p-4">
+        <div class="bg-panelBg border border-gold/30 rounded-lg w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+            <div class="p-4 border-b border-white/10 flex justify-between items-center bg-charcoal">
+                <h2 class="font-serif text-lg font-bold text-gold">Side-by-Side Regional Comparison</h2>
+                <button onclick="toggleCompareModal()" class="text-gray-400 hover:text-cream"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-4 border-b border-white/10 grid grid-cols-2 gap-4 bg-charcoal/50">
+                <div>
+                    <label class="text-xs text-gray-400 block mb-1">Region A</label>
+                    <select id="selectRegionA" onchange="renderComparison()" class="w-full bg-panelBg border border-white/10 rounded px-3 py-1.5 text-sm text-cream"></select>
+                </div>
+                <div>
+                    <label class="text-xs text-gray-400 block mb-1">Region B</label>
+                    <select id="selectRegionB" onchange="renderComparison()" class="w-full bg-panelBg border border-white/10 rounded px-3 py-1.5 text-sm text-cream"></select>
+                </div>
+            </div>
+            <div class="flex-1 overflow-y-auto p-6 grid grid-cols-1 md:grid-cols-2 gap-6 text-sm" id="compareGrid">
+                <!-- Comparative content dynamically injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- DATA & LOGIC -->
+    <script>
+        // 1. DATA SCHEMA (6-8 Expandable Indian Art Hubs)
+        const artLocations = [
+            {
+                id: "ajanta",
+                name: "Ajanta Cave Murals",
+                region: "Aurangabad, Maharashtra",
+                coordinates: [20.5519, 75.7033],
+                era: "Ancient",
+                period: "2nd Century BCE - 5th Century CE",
+                medium: "Murals",
+                summary: "Masterpieces of Buddhist religious art featuring expressive tempera cave wall paintings.",
+                image: "assets/images/ajanta.jpg",
+                fallbackImage: "https://images.unsplash.com/photo-1600100397608-f090742f4955?auto=format&fit=crop&w=800&q=80",
+                artistSpotlight: "Monastic guilds & Royal Vakataka patrons",
+                keyTechniques: ["Tempera technique over mud plaster", "Rhythmic sinuous brush lines", "Perspective via foreshortening"],
+                pigments: [
+                    { name: "Lapis Lazuli", source: "Imported Badakhshan stone (Blue)" },
+                    { name: "Red Ochre", source: "Local volcanic laterite soil (Red/Brown)" },
+                    { name: "Terra Verte", source: "Crushed green earth minerals (Green)" }
+                ]
+            },
+            {
+                id: "tanjore",
+                name: "Thanjavur Gold Leaf Painting",
+                region: "Thanjavur, Tamil Nadu",
+                coordinates: [10.7870, 79.1378],
+                era: "Medieval",
+                period: "16th - 18th Century CE",
+                medium: "Miniatures",
+                summary: "Classical South Indian painting style known for rich surface embellishments, gesso work, and 22-karat gold foil.",
+                image: "assets/images/tanjore.jpg",
+                fallbackImage: "https://images.unsplash.com/photo-1582560475093-ba66accbc424?auto=format&fit=crop&w=800&q=80",
+                artistSpotlight: "Raju & Naidu artisan communities under Maratha patronage",
+                keyTechniques: ["Un-baked Gesso relief work (Sukkan-sei)", "22-Karat pure gold foil inlay", "Precious glass bead embedding"],
+                pigments: [
+                    { name: "Gold Leaf", source: "Beaten 22k gold sheets" },
+                    { name: "Vermilion", source: "Cinnabar mineral powder (Scarlet)" },
+                    { name: "Lampblack", source: "Soot collected from oil lamps (Black)" }
+                ]
+            },
+            {
+                id: "kangra",
+                name: "Kangra Pahari Miniatures",
+                region: "Kangra Valley, Himachal Pradesh",
+                coordinates: [32.1024, 76.2691],
+                era: "Medieval",
+                period: "18th Century CE",
+                medium: "Miniatures",
+                summary: "Delicate, lyrical miniature paintings depicting Radha-Krishna themes against verdant Himalayan landscape backdrops.",
+                image: "assets/images/kangra.jpg",
+                fallbackImage: "https://images.unsplash.com/photo-1579783902614-a3fb3927b675?auto=format&fit=crop&w=800&q=80",
+                artistSpotlight: "Nainsukh family lineage of Pahari masters",
+                keyTechniques: ["Ultrafine squirrel-hair brushwork", "Burnishing with agate stone for sheen", "Poetic lyrical landscape integration"],
+                pigments: [
+                    { name: "Peori", source: "Indian Yellow (Harvested organic pigment)" },
+                    { name: "Malachite", source: "Crushed copper carbonate mineral (Green)" },
+                    { name: "White Lead", source: "Kashmeeri Safeda (Bright White)" }
+                ]
+            },
+            {
+                id: "madhubani",
+                name: "Madhubani (Mithila) Folk Art",
+                region: "Mithila Region, Bihar",
+                coordinates: [26.3493, 86.0718],
+                era: "Folk",
+                period: "Traditional / Continuous",
+                medium: "Folk",
+                summary: "Intricate geometric wall and paper art traditionally created by women to commemorate festivals and life cycles.",
+                image: "assets/images/madhubani.jpg",
+                fallbackImage: "https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=800&q=80",
+                artistSpotlight: "Matriarchal lineage (Sita Devi, Ganga Devi)",
+                keyTechniques: ["Double-line border outlines", "Bamboo twig & nib application", "Cross-hatching & intricate fill patterns"],
+                pigments: [
+                    { name: "Turmeric Paste", source: "Fresh Curcuma roots (Bright Yellow)" },
+                    { name: "Kajal", source: "Mustard oil lamp soot (Deep Black)" },
+                    { name: "Kusum Flower", source: "Petal extracts (Vibrant Crimson)" }
+                ]
+            },
+            {
+                id: "bhimbetka",
+                name: "Bhimbetka Rock Shelters",
+                region: "Raisen, Madhya Pradesh",
+                coordinates: [22.9371, 77.6120],
+                era: "Prehistoric",
+                period: "10,000 BCE - 1,000 BCE",
+                medium: "Murals",
+                summary: "One of humankind's earliest artistic expressions, featuring prehistoric cave pictographs of hunting and dancing.",
+                image: "assets/images/bhimbetka.jpg",
+                fallbackImage: "https://images.unsplash.com/photo-1565008447742-97f6f38c985c?auto=format&fit=crop&w=800&q=80",
+                artistSpotlight: "Upper Paleolithic and Mesolithic hunter-gatherers",
+                keyTechniques: ["Direct finger painting", "Animal fat binding", "Natural rock fissure utilization"],
+                pigments: [
+                    { name: "Hematite", source: "Iron ore rocks (Dark Red/Indian Red)" },
+                    { name: "Manganese Dioxide", source: "Mineral deposits (Deep Black/Purple)" },
+                    { name: "Kaolin Clay", source: "Natural white sediment (White)" }
+                ]
+            },
+            {
+                id: "kalighat",
+                name: "Kalighat Patachitra",
+                region: "Kolkata, West Bengal",
+                coordinates: [22.5186, 88.3444],
+                era: "Modern",
+                period: "19th Century CE",
+                medium: "Folk",
+                summary: "Bold, swift watercolor scrolls created near Kolkata's Kalighat temple, marking India's transition to modern urban satire.",
+                image: "assets/images/kalighat.jpg",
+                fallbackImage: "https://images.unsplash.com/photo-1577083552431-6e5fd01aa342?auto=format&fit=crop&w=800&q=80",
+                artistSpotlight: "Migrant Patua scroll painter guilds",
+                keyTechniques: ["Single-sweep volumetric shading", "Broad sweeping brush strokes", "Satirical contemporary social commentary"],
+                pigments: [
+                    { name: "Indigo", source: "Indigofera tinctoria plant (Deep Blue)" },
+                    { name: "Yellow Orpiment", source: "Arsenic trisulfide mineral (Bright Yellow)" },
+                    { name: "Charcoal", source: "Burnt wood soot (Contour Black)" }
+                ]
+            }
+        ];
+
+        // 2. MAP & APPLICATION INITIALIZATION
+        let map;
+        let markersGroup;
+        let activeLocationId = null;
+
+        function initMap() {
+            // Dark Minimalist Base Map (CartoDB Dark Matter)
+            map = L.map('map', { zoomControl: false }).setView([22.5937, 78.9629], 5);
+            
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 18,
+                minZoom: 4
+            }).addTo(map);
+
+            L.control.zoom({ position: 'bottomleft' }).addTo(map);
+            markersGroup = L.layerGroup().addTo(map);
+
+            renderMarkers(artLocations);
+            populateComparisonDropdowns();
+            lucide.createIcons();
+        }
+
+        // 3. RENDER CUSTOM MAP MARKERS
+        function renderMarkers(locations) {
+            markersGroup.clearLayers();
+
+            locations.forEach(loc => {
+                const customIcon = L.divIcon({
+                    className: 'custom-pin-wrapper',
+                    html: `
+                        <div class="custom-pin-container" title="${loc.name}">
+                            <div class="pin-pulse"></div>
+                            <div class="pin-core"></div>
+                        </div>
+                    `,
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                });
+
+                const marker = L.marker(loc.coordinates, { icon: customIcon });
+                marker.on('click', () => focusLocation(loc));
+                markersGroup.addLayer(marker);
+            });
+        }
+
+        // 4. FOCUS LOCATION & RENDER DETAIL PANEL
+        function focusLocation(loc) {
+            activeLocationId = loc.id;
+            
+            // Smooth Camera FlyTo
+            map.flyTo(loc.coordinates, 7, { duration: 1.5, easeLinearity: 0.25 });
+
+            const placeholder = document.getElementById('panelPlaceholder');
+            const content = document.getElementById('panelContent');
+
+            placeholder.classList.add('hidden');
+            content.classList.remove('hidden');
+
+            content.innerHTML = `
+                <!-- Media Gallery Layer -->
+                <div class="relative w-full h-48 rounded-lg overflow-hidden bg-charcoal border border-white/10 group">
+                    <img src="${loc.image}" 
+                         onerror="this.onerror=null; this.src='${loc.fallbackImage}';" 
+                         alt="${loc.name}" 
+                         class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105">
+                    <div class="absolute inset-0 bg-gradient-to-t from-panelBg via-transparent to-transparent"></div>
+                    <span class="absolute bottom-2 left-3 text-xs uppercase tracking-widest text-gold font-semibold">${loc.era} Era</span>
+                </div>
+
+                <!-- Title & Meta -->
+                <div>
+                    <h2 class="font-serif text-2xl font-bold text-cream">${loc.name}</h2>
+                    <p class="text-xs text-gold/80 flex items-center mt-1">
+                        <i data-lucide="map-pin" class="w-3.5 h-3.5 mr-1"></i> ${loc.region}
+                    </p>
+                    <p class="text-xs text-gray-400 mt-0.5">${loc.period}</p>
+                </div>
+
+                <!-- Context -->
+                <div>
+                    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Historical Context</h3>
+                    <p class="text-xs text-gray-300 leading-relaxed">${loc.summary}</p>
+                </div>
+
+                <!-- Key Techniques -->
+                <div>
+                    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Signature Techniques</h3>
+                    <ul class="space-y-1">
+                        ${loc.keyTechniques.map(tech => `
+                            <li class="text-xs text-gray-300 flex items-center">
+                                <span class="w-1.5 h-1.5 rounded-full bg-gold mr-2"></span>${tech}
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+
+                <!-- Natural Pigment Map -->
+                <div>
+                    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Traditional Pigment Palette</h3>
+                    <div class="grid grid-cols-1 gap-2">
+                        ${loc.pigments.map(p => `
+                            <div class="bg-charcoal/60 border border-white/5 p-2 rounded flex justify-between items-center text-xs">
+                                <span class="font-medium text-gold">${p.name}</span>
+                                <span class="text-gray-400 text-[11px]">${p.source}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <!-- Artist Spotlight -->
+                <div class="border-t border-white/10 pt-4">
+                    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Guild / Master Lineage</h3>
+                    <p class="text-xs text-cream italic">${loc.artistSpotlight}</p>
+                </div>
+            `;
+
+            lucide.createIcons();
+        }
+
+        // 5. DYNAMIC FILTER & SEARCH ENGINE
+        function applyFilters() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const era = document.getElementById('eraFilter').value;
+            const medium = document.getElementById('mediumFilter').value;
+
+            const filtered = artLocations.filter(loc => {
+                const matchesSearch = loc.name.toLowerCase().includes(query) || 
+                                      loc.region.toLowerCase().includes(query) || 
+                                      loc.summary.toLowerCase().includes(query);
+                const matchesEra = (era === 'ALL') || (loc.era === era);
+                const matchesMedium = (medium === 'ALL') || (loc.medium === medium);
+
+                return matchesSearch && matchesEra && matchesMedium;
+            });
+
+            renderMarkers(filtered);
+        }
+
+        // 6. COMPARISON MODAL CONTROLLER
+        function toggleCompareModal() {
+            const modal = document.getElementById('compareModal');
+            modal.classList.toggle('hidden');
+            if(!modal.classList.contains('hidden')) renderComparison();
+        }
+
+        function populateComparisonDropdowns() {
+            const selA = document.getElementById('selectRegionA');
+            const selB = document.getElementById('selectRegionB');
+
+            artLocations.forEach((loc, index) => {
+                selA.options.add(new Option(loc.name, loc.id, false, index === 0));
+                selB.options.add(new Option(loc.name, loc.id, false, index === 1));
+            });
+        }
+
+        function renderComparison() {
+            const idA = document.getElementById('selectRegionA').value;
+            const idB = document.getElementById('selectRegionB').value;
+
+            const itemA = artLocations.find(l => l.id === idA);
+            const itemB = artLocations.find(l => l.id === idB);
+
+            const grid = document.getElementById('compareGrid');
+            
+            const renderCard = (item) => `
+                <div class="bg-charcoal/40 border border-white/10 rounded-lg p-4 space-y-4">
+                    <img src="${item.image}" onerror="this.onerror=null; this.src='${item.fallbackImage}';" class="w-full h-40 object-cover rounded border border-white/10">
+                    <div>
+                        <h3 class="font-serif font-bold text-lg text-gold">${item.name}</h3>
+                        <p class="text-xs text-gray-400">${item.region} | ${item.period}</p>
+                    </div>
+                    <div>
+                        <h4 class="text-xs uppercase text-gray-400 font-semibold mb-1">Medium & Style</h4>
+                        <p class="text-xs text-gray-300">${item.medium} (${item.era} Era)</p>
+                    </div>
+                    <div>
+                        <h4 class="text-xs uppercase text-gray-400 font-semibold mb-1">Core Techniques</h4>
+                        <ul class="text-xs text-gray-300 space-y-1">
+                            ${item.keyTechniques.map(t => `<li>• ${t}</li>`).join('')}
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="text-xs uppercase text-gray-400 font-semibold mb-1">Pigment Sourcing</h4>
+                        <p class="text-xs text-gray-300">${item.pigments.map(p => p.name).join(', ')}</p>
+                    </div>
+                </div>
+            `;
+
+            grid.innerHTML = renderCard(itemA) + renderCard(itemB);
+        }
+
+        // Initialize Map on Load
+        window.onload = initMap;
+    </script>
+</body>
+</html>
